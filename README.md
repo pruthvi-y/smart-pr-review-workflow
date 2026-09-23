@@ -1,4 +1,4 @@
-# Smart PR Review Workflow — Stage 8
+# Smart PR Review Workflow
 
 A deliberately small LangGraph learning project that reviews a pull request using Amazon Bedrock, local RAG, parallel checks, an evaluator/revision loop, GitHub, and MCP.
 
@@ -58,18 +58,9 @@ Stage 4  RAG + evidence
 Stage 5  Evaluator + revision loop
 Stage 6  Deferred: human-in-the-loop + persistence
 Stage 7  GitHub REST tool integration
-Stage 8  MCP integration  <-- current
+Stage 8  MCP integration
 ```
 
-## Stage 8 goal
-
-Stage 7 used this boundary:
-
-```text
-LangGraph -> GitHubClient -> GitHub REST API
-```
-
-Stage 8 adds the MCP boundary:
 
 ```text
 LangGraph -> MCP client -> MCP server -> GitHubClient -> GitHub REST API
