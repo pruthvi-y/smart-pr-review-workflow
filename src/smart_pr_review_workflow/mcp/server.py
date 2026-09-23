@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -23,50 +22,52 @@ def _github() -> GitHubClient:
 
 
 @mcp.tool()
-def get_pull_request(owner: str, repo: str, number: int) -> str:
-    """Get pull-request metadata from GitHub."""
+def get_pull_request(owner: str, repo: str, number: int) -> dict:
+    """Get pull-request metadata from GitHub as structured MCP output."""
     result = _github().get_pull_request(owner, repo, number)
-    return json.dumps(
-        {
-            "owner": owner,
-            "repo": repo,
-            "number": number,
-            "title": result.get("title", ""),
-            "body": result.get("body") or "",
-            "html_url": result.get("html_url", ""),
-            "head_sha": ((result.get("head") or {}).get("sha")) or "",
-        }
-    )
+
+    return {
+        "owner": owner,
+        "repo": repo,
+        "number": number,
+        "title": result.get("title", ""),
+        "body": result.get("body") or "",
+        "html_url": result.get("html_url", ""),
+        "head_sha": ((result.get("head") or {}).get("sha")) or "",
+    }
 
 
 @mcp.tool()
-def list_pull_request_files(owner: str, repo: str, number: int) -> str:
+def list_pull_request_files(owner: str, repo: str, number: int) -> list[dict]:
     """List changed files for a pull request, including available patch text."""
     result = _github().list_pull_request_files(owner, repo, number)
-    files = [
+
+    return [
         {
             "filename": item.get("filename", ""),
             "status": item.get("status", ""),
-            "additions": int(item.get("additions", 0)),
-            "deletions": int(item.get("deletions", 0)),
-            "changes": int(item.get("changes", 0)),
-            "patch": item.get("patch", ""),
+            "additions": item.get("additions", 0),
+            "deletions": item.get("deletions", 0),
+            "patch": item.get("patch") or "",
         }
         for item in result
     ]
-    return json.dumps(files)
 
 
 @mcp.tool()
-def create_pull_request_comment(owner: str, repo: str, number: int, body: str) -> str:
+def create_pull_request_comment(
+    owner: str,
+    repo: str,
+    number: int,
+    body: str,
+) -> dict:
     """Post a conversation comment on a GitHub pull request."""
     result = _github().create_pull_request_comment(owner, repo, number, body)
-    return json.dumps(
-        {
-            "id": result.get("id"),
-            "html_url": result.get("html_url", ""),
-        }
-    )
+
+    return {
+        "id": result.get("id"),
+        "html_url": result.get("html_url", ""),
+    }
 
 
 def main() -> None:
