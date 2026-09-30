@@ -1,5 +1,8 @@
+import argparse
 import os
+import sys
 
+from .batch import BatchScanConfig, run_batch_reviews
 from .rag import build_index
 from .workflow import build_workflow
 
@@ -39,7 +42,33 @@ MOCK_PR = {
 }
 
 
-def main() -> None:
+def _run_single_workflow(owner: str, repo: str, pr_number: int) -> dict:
+    """Run the workflow for a single PR and return final state."""
+    graph = build_workflow()
+    github_enabled = os.getenv("GITHUB_ENABLED", "false").lower() == "true"
+    github_integration = os.getenv("GITHUB_INTEGRATION", "mcp").lower()
+
+    initial_state = dict(MOCK_PR)
+    if github_enabled:
+        initial_state.update({
+            "github_enabled": True,
+            "github_integration": github_integration,
+            "github_owner": owner,
+            "github_repo": repo,
+            "github_pr_number": pr_number,
+        })
+
+    config = {"configurable": {"thread_id": f"stage8-pr-review-{owner}-{repo}-{pr_number}"}}
+
+    final_state = None
+    for state in graph.stream(initial_state, config=config, stream_mode="values"):
+        final_state = state
+
+    return final_state or {}
+
+
+def _run_single_pr_interactive() -> None:
+    """Run single PR review with full output."""
     graph = build_workflow()
     github_enabled = os.getenv("GITHUB_ENABLED", "false").lower() == "true"
     github_integration = os.getenv("GITHUB_INTEGRATION", "mcp").lower()
@@ -119,6 +148,134 @@ def main() -> None:
     print(f"Integration : {final_state.get('github_integration', 'mock')}")
     print(f"Commented   : {final_state.get('github_comment_posted', False)}")
     print("\n" + final_state["final_review"])
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Smart PR Review Workflow: LangGraph + Bedrock + Local RAG + MCP"
+    )
+    parser.add_argument(
+        "--batch",
+        action="store_true",
+        help="Run in batch mode (review multiple PRs)",
+    )
+    parser.add_argument(
+        "--owner",
+        default=os.getenv("GITHUB_OWNER"),
+        help="Repository owner (or use GITHUB_OWNER env var)",
+    )
+    parser.add_argument(
+        "--repo",
+        default=os.getenv("GITHUB_REPO"),
+        help="Repository name (or use GITHUB_REPO env var)",
+    )
+    parser.add_argument(
+        "--labels",
+        help="Include PRs with these labels (comma-separated)",
+    )
+    parser.add_argument(
+        "--exclude-labels",
+        help="Exclude PRs with these labels (comma-separated)",
+    )
+    parser.add_argument(
+        "--state",
+        default="open",
+        choices=["open", "closed", "all"],
+        help="PR state filter (default: open)",
+    )
+    parser.add_argument(
+        "--sort",
+        default="created",
+        choices=["created", "updated", "popularity"],
+        help="Sort order (default: created)",
+    )
+    parser.add_argument(
+        "--max-results",
+        type=int,
+        default=10,
+        help="Maximum PRs to review (default: 10)",
+    )
+    parser.add_argument(
+        "--no-exclude-draft",
+        action="store_true",
+        help="Include draft PRs (by default excluded)",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress progress output",
+    )
+    parser.add_argument(
+        "--auto-label-reviewed",
+        action="store_true",
+        default=os.getenv("GITHUB_AUTO_LABEL_REVIEWED", "true").lower() == "true",
+        help="Automatically add 'reviewed' label after posting a comment (env: GITHUB_AUTO_LABEL_REVIEWED)",
+    )
+    parser.add_argument(
+        "--reviewed-label",
+        default=os.getenv("GITHUB_REVIEWED_LABEL", "reviewed"),
+        help="Label name to mark reviewed PRs (env: GITHUB_REVIEWED_LABEL, default: 'reviewed')",
+    )
+    parser.add_argument(
+        "--show-full-review",
+        action="store_true",
+        help="Display complete review findings and recommendations (verbose batch mode)",
+    )
+
+    args = parser.parse_args()
+
+    # Single PR mode (default)
+    if not args.batch:
+        print("[rag] Loading local knowledge index...")
+        build_index()
+        _run_single_pr_interactive()
+        return
+
+    # Batch mode
+    if not args.owner or not args.repo:
+        print("Error: --owner and --repo are required for batch mode")
+        print("Or set GITHUB_OWNER and GITHUB_REPO environment variables")
+        sys.exit(1)
+
+    # Parse label filters
+    labels = None
+    if args.labels:
+        labels = [l.strip() for l in args.labels.split(",")]
+
+    exclude_labels = None
+    if args.exclude_labels:
+        exclude_labels = [l.strip() for l in args.exclude_labels.split(",")]
+
+    # Build batch config
+    config = BatchScanConfig(
+        owner=args.owner,
+        repo=args.repo,
+        labels=labels,
+        state=args.state,
+        max_results=args.max_results,
+        sort=args.sort,
+        exclude_draft=not args.no_exclude_draft,
+        exclude_labels=exclude_labels,
+    )
+
+    print("[rag] Loading local knowledge index...")
+    build_index()
+
+    # Run batch reviews
+    results = run_batch_reviews(
+        config=config,
+        run_workflow=_run_single_workflow,
+        use_mcp=os.getenv("GITHUB_INTEGRATION", "mcp").lower() == "mcp",
+        verbose=not args.quiet,
+        auto_label_reviewed=args.auto_label_reviewed,
+        reviewed_label=args.reviewed_label,
+        show_full_review=args.show_full_review,
+    )
+
+    if args.quiet:
+        successes = sum(1 for r in results["results"] if r["status"] == "success")
+        failures = len(results["results"]) - successes
+        print(f"\n[summary] Reviewed {successes} PRs, {failures} errors\n")
 
 
 if __name__ == "__main__":
