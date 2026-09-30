@@ -114,3 +114,29 @@ class GitHubClient:
             f"/repos/{owner_q}/{repo_q}/issues/{number}/comments",
             {"body": body},
         )
+
+    def list_pull_requests(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "open",
+        per_page: int = 10,
+        labels: str | None = None,
+        sort: str = "created",
+        direction: str = "desc",
+    ) -> list[dict]:
+        owner_q = quote(owner, safe="")
+        repo_q = quote(repo, safe="")
+        params = f"?state={state}&per_page={per_page}&sort={sort}&direction={direction}"
+        if labels:
+            params += f"&labels={quote(labels, safe='')}"
+        return self._request("GET", f"/repos/{owner_q}/{repo_q}/pulls{params}")
+
+    def add_labels_to_issue(self, owner: str, repo: str, issue_number: int, labels: list[str]) -> dict:
+        owner_q = quote(owner, safe="")
+        repo_q = quote(repo, safe="")
+        return self._request(
+            "POST",
+            f"/repos/{owner_q}/{repo_q}/issues/{issue_number}/labels",
+            {"labels": labels},
+        )

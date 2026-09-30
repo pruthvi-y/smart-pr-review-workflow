@@ -70,6 +70,40 @@ def create_pull_request_comment(
     }
 
 
+@mcp.tool()
+def list_pull_requests(
+    owner: str,
+    repo: str,
+    state: str = "open",
+    per_page: int = 10,
+    labels: str | None = None,
+    sort: str = "created",
+    direction: str = "desc",
+) -> list[dict]:
+    """List pull requests from a repository with optional filtering."""
+    result = _github().list_pull_requests(
+        owner, repo, state, per_page, labels, sort, direction
+    )
+
+    return result
+
+
+@mcp.tool()
+def add_labels_to_issue(
+    owner: str,
+    repo: str,
+    issue_number: int,
+    labels: list[str],
+) -> dict:
+    """Add labels to a GitHub issue or pull request."""
+    result = _github().add_labels_to_issue(owner, repo, issue_number, labels)
+
+    return {
+        "issue_number": issue_number,
+        "labels": [item.get("name", "") for item in result] if isinstance(result, list) else [],
+    }
+
+
 def main() -> None:
     """Run the MCP server over stdio. Keep protocol output off stdout."""
     logging.basicConfig(level=os.getenv("MCP_LOG_LEVEL", "WARNING"))

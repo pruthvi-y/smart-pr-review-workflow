@@ -203,3 +203,57 @@ class MCPGitHubClient:
                 return result
 
         return self._run(_comment)
+
+    def list_pull_requests(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "open",
+        per_page: int = 10,
+        labels: str | None = None,
+        sort: str = "created",
+        direction: str = "desc",
+    ) -> list[dict[str, Any]]:
+        async def _list() -> list[dict[str, Any]]:
+            async with Client(_server_parameters()) as client:
+                result = await _call_tool(
+                    client,
+                    "list_pull_requests",
+                    {
+                        "owner": owner,
+                        "repo": repo,
+                        "state": state,
+                        "per_page": per_page,
+                        "labels": labels,
+                        "sort": sort,
+                        "direction": direction,
+                    },
+                )
+
+                return result
+
+        return self._run(_list)
+
+    def add_labels_to_issue(
+        self,
+        owner: str,
+        repo: str,
+        issue_number: int,
+        labels: list[str],
+    ) -> dict[str, Any]:
+        async def _add_labels() -> dict[str, Any]:
+            async with Client(_server_parameters()) as client:
+                result = await _call_tool(
+                    client,
+                    "add_labels_to_issue",
+                    {
+                        "owner": owner,
+                        "repo": repo,
+                        "issue_number": issue_number,
+                        "labels": labels,
+                    },
+                )
+
+                return result
+
+        return self._run(_add_labels)
